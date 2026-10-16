@@ -12,7 +12,8 @@ export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const pathname = usePathname();
-  const [isIntroDone, setIsIntroDone] = useState(true);
+  // Delay navbar reveal on home page to sync with cinematic hero animation
+  const [isIntroDone, setIsIntroDone] = useState(pathname !== "/");
   const navRef = useRef<HTMLDivElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const { navigateTo } = usePageTransition();
@@ -127,7 +128,7 @@ export default function Navbar() {
         className="flex items-center gap-4 md:gap-8 pointer-events-auto will-change-transform"
       >
         <button
-          onClick={() => navigateTo("/dashboard")}
+          onClick={() => navigateTo("/")}
           className="font-mono text-lg md:text-xl tracking-tighter text-white font-bold hover:text-accent transition-colors shrink-0"
         >
           NEURO
