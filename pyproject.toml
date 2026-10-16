@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neuro-cxr"
+version = "2.0.0"
+description = "Multimodal Chest X-Ray Analysis with Explainable AI, Disease Localization, and Risk Scoring"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Debashis Mohapatra", email = "debashismohapatra8260@gmail.com" }
+]
+maintainers = [
+    { name = "Debashis Mohapatra", email = "debashismohapatra8260@gmail.com" }
+]
+keywords = [
+    "medical-ai",
+    "chest-xray",
+    "densenet",
+    "yolov8",
+    "grad-cam",
+    "explainable-ai",
+    "computer-vision",
+    "fastapi"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Medical Science Apps."
+]
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn>=0.29.0",
+    "torch==2.3.0",
+    "torchvision==0.18.0",
+    "ultralytics>=8.4.0",
+    "opencv-python-headless>=4.9.0,<4.11.0",
+    "Pillow>=10.3.0",
+    "numpy>=1.26.0,<2.0.0",
+    "python-multipart>=0.0.9",
+    "matplotlib>=3.8.0",
+    "pandas>=2.2.0",
+    "scikit-learn>=1.4.0",
+    "tqdm>=4.66.0",
+    "pyyaml>=6.0.0"
+]
+
+[project.urls]
+Homepage = "https://github.com/debashismohapatra/NeuroChestAnalysis"
+Repository = "https://github.com/debashismohapatra/NeuroChestAnalysis"
+Documentation = "https://github.com/debashismohapatra/NeuroChestAnalysis#readme"

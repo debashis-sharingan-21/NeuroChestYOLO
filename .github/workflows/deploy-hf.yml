@@ -1,0 +1,51 @@
+name: Deploy Backend to Hugging Face Spaces
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    # Only run this automation if changes were actually made to backend-related files
+    paths:
+      - 'backend/**'
+      - 'models/**'
+      - 'hf_space/**'
+      - '.github/workflows/deploy-hf.yml'
+
+jobs:
+  deploy-to-hf:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout main repository
+        uses: actions/checkout@v4
+
+      - name: Setup and Push to Hugging Face
+        run: |
+          # 1. Clone the existing Hugging Face Space (This downloads the heavy models already stored there)
+          git clone https://sagarsarangi26:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/sagarsarangi26/neuro hf_deployment
+          
+          # 2. Copy the updated deployment blueprints into the cloned folder
+          cp -a hf_space/. hf_deployment/
+          
+          # 3. Copy the updated backend code into the cloned folder
+          cp -r backend/ hf_deployment/
+          
+          # Note: We do NOT copy models/ from GitHub because they are git-ignored. 
+          # The models are preserved safely inside the Hugging Face repository we just cloned!
+          
+          # 4. Commit and Push the updates back to Hugging Face
+          cd hf_deployment
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions Automation"
+          
+          git add .
+          
+          # Only commit and push if there are actual changes
+          if git diff --staged --quiet; then
+            echo "No changes to deploy."
+          else
+            git commit -m "Auto-deployed backend from GitHub Actions (Commit: ${{ github.sha }})"
+            git push
+          fi

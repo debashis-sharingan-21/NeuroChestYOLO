@@ -1,0 +1,48 @@
+{
+  "version": "v3",
+  "class_map": {
+    "Atelectasis": 0,
+    "Calcification": 1,
+    "Cardiomegaly": 2,
+    "Consolidation": 3,
+    "Diffuse Nodule": 4,
+    "Effusion": 5,
+    "Emphysema": 6,
+    "Fibrosis": 7,
+    "Fracture": 8,
+    "Mass": 9,
+    "Nodule": 10,
+    "Pleural Thickening": 11,
+    "Pneumothorax": 12
+  },
+  "id_to_class": {
+    "0": "Atelectasis",
+    "1": "Calcification",
+    "2": "Cardiomegaly",
+    "3": "Consolidation",
+    "4": "Diffuse Nodule",
+    "5": "Effusion",
+    "6": "Emphysema",
+    "7": "Fibrosis",
+    "8": "Fracture",
+    "9": "Mass",
+    "10": "Nodule",
+    "11": "Pleural Thickening",
+    "12": "Pneumothorax"
+  },
+  "overlap_classes": [
+    "Atelectasis",
+    "Cardiomegaly",
+    "Consolidation",
+    "Effusion",
+    "Emphysema",
+    "Fibrosis",
+    "Mass",
+    "Nodule",
+    "Pleural Thickening",
+    "Pneumothorax"
+  ],
+  "img_size_train": 800,
+  "conf_thresh": 0.2,
+  "iou_thresh": 0.5
+}

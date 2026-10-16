@@ -1,0 +1,31 @@
+# ==============================================================================
+# Neuro CXR - Centralized Training & Hyperparameter Configuration
+# Maintainer: Debashis Mohapatra <debashismohapatra8260@gmail.com>
+# Year: 2026
+# ==============================================================================
+
+# Data Paths
+train_csv: "data/train.csv"
+val_csv: "data/val.csv"
+images_dir: "data/images"
+img_col: "image_path"
+finding_col: null                 # Columns are already binary multi-hot
+
+# Training Hyperparameters
+batch_size: 32
+lr: 0.0001
+weight_decay: 0.0001
+epochs: 10
+img_size: 224
+
+# Optimization & Architecture
+optimizer: "adamw"
+scheduler: "plateau"
+pretrained: true                  # Pre-trained ImageNet backbone features
+fp16: true                        # Mixed precision FP16 on Tensor Cores
+use_pos_weight: true              # Imbalance loss weighting enabled
+
+# Hardware & System
+device: "cuda"
+num_workers: 4                    # Multi-process DataLoader for fast GPU saturation
+checkpoint_dir: "models"

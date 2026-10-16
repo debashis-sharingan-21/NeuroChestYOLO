@@ -1,0 +1,14 @@
+# HF Space requirements — torch/torchvision are installed separately in Dockerfile
+# for CPU-only wheels. Do NOT add them here.
+
+fastapi>=0.111.0
+uvicorn>=0.29.0
+ultralytics>=8.4.0
+opencv-python-headless>=4.9.0
+Pillow>=10.3.0
+numpy>=1.26.0
+python-multipart>=0.0.9
+matplotlib>=3.8.0
+pandas>=2.2.0
+scikit-learn>=1.4.0
+tqdm>=4.66.0

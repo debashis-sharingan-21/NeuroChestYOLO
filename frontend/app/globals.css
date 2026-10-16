@@ -1,0 +1,51 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #000000;
+  --foreground: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #000000;
+    --foreground: #ffffff;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-sora), ui-sans-serif, system-ui;
+  overflow-x: hidden;
+}
+
+/* Global noise overlay */
+.noise-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+}
+
+/* Custom Utilities for GSAP */
+.will-change-transform {
+  will-change: transform;
+}
+
+.will-change-opacity {
+  will-change: opacity;
+}
+
+/* Rounded system from AGENTS.md */
+.rounded-container {
+  @apply rounded-[2rem] md:rounded-[3rem];
+}
+
+/* Magnetic button effect placeholder (logic in GSAP) */
+.btn-magnetic {
+  @apply relative overflow-hidden;
+}

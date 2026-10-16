@@ -1,0 +1,55 @@
+# --- Environments & Secrets ---
+.env
+.env.local
+.env.*.local
+venv/
+.venv/
+
+# --- Data & Image Assets (Exclude large raw image archives) ---
+data/images/
+data/*.parquet
+data/*.zip
+
+# Explicitly keep CSV metadata in source control
+!data/train.csv
+!data/val.csv
+
+# --- Python / Backend ---
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+backend/__pycache__/
+training/__pycache__/
+
+# --- Node / Frontend ---
+node_modules/
+frontend/node_modules/
+.next/
+frontend/.next/
+out/
+build/
+.vercel
+*.tsbuildinfo
+
+# --- Task Logs & Caches ---
+*.log
+task-*.log
+.system_generated/
+.cache/
+
+# --- System / OS ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Tool Specific ---
+.gemini/
+.agents/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+
+# --- Temporary Root Files ---
+scratch.txt
+yolov8s.pt
