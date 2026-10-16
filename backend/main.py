@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 import uvicorn
 import logging
 import os
+import gc
+import torch
 
 from .densenet_inference import run_densenet_inference
 from .yolo_inference import run_yolo_inference
@@ -116,6 +118,12 @@ async def predict(file: UploadFile = File(...)):
             original_img_pil=original_img_pil
         )
         
+        # Explicitly clean up request arrays and tensors
+        del densenet_results, yolo_results, img_tensor, original_img_pil
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
+
         return response
 
     except Exception as e:

@@ -1,3 +1,4 @@
+import gc
 from .risk_scorer import RISK_MAP
 from .utils import numpy_to_b64, pil_to_numpy, normalize_label
 from .yolo_inference import draw_boxes_on_image
@@ -12,7 +13,7 @@ def build_unified_response(
     original_img_pil=None,
     original_b64=None
 ):
-    """Assemble final JSON response for frontend with aligned keys and blended views."""
+    """Assemble final JSON response for frontend with aligned keys, blended views, and GC cleanup."""
     
     # 1. Confirmed Findings (Positive conditions sorted by probability)
     confirmed_findings = []
@@ -74,6 +75,7 @@ def build_unified_response(
         # Draw YOLO detection boxes on top of the Grad-CAM activation heatmap
         blended_np = draw_boxes_on_image(primary_heatmap_np, kept_boxes)
         combined_b64 = numpy_to_b64(blended_np)
+        del blended_np
     elif primary_heatmap_b64:
         combined_b64 = primary_heatmap_b64
     elif len(kept_boxes) > 0:
@@ -103,4 +105,7 @@ def build_unified_response(
         "report": None
     }
     
+    # 5. Clean up allocated image buffers and invoke garbage collection
+    gc.collect()
+
     return response

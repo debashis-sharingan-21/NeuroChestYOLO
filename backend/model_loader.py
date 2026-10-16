@@ -87,5 +87,5 @@ def load_all_models(
         'overlap_classes': set(yolo_config['overlap_classes']),
         'yolo_conf': yolo_config['conf_thresh'],
         'yolo_iou': yolo_config['iou_thresh'],
-        'yolo_imgsz': yolo_config.get('img_size_train', 800)
+        'yolo_imgsz': int(os.environ.get('YOLO_IMGSZ', 416))
     }

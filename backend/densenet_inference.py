@@ -1,3 +1,5 @@
+import os
+import gc
 import torch
 import torch.nn as nn
 import numpy as np
@@ -24,12 +26,12 @@ CONDITION_COLORS_RGB = {
 }
 
 def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob_thresholds, cam_thresholds):
-    """Run full DenseNet inference pipeline."""
+    """Run DenseNet inference with memory optimization for constrained environments."""
     model.eval()
     device = next(model.parameters()).device
     img_tensor = img_tensor.to(device)
     
-    # 1. Standard Prediction
+    # 1. Standard Prediction strictly under torch.no_grad()
     with torch.no_grad():
         logits = model(img_tensor)
         probs = torch.sigmoid(logits)[0].cpu().numpy()
@@ -49,39 +51,43 @@ def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob
             "positive": is_positive
         }
     
-    # 3. GradCAM & Visualization
+    # 3. GradCAM & Visualization: restricted to single top positive condition
     original_np = pil_to_numpy(original_img_pil)
     heatmaps = {}
-    
     primary_heatmap_np = None
     heatmap_images = {}
     
-    # Target layer for DenseNet-121 GradCAM (Custom Backbone)
-    target_layer = model.backbone.norm5
+    valid_conditions = [c for c in positive_conditions if c != "No Finding"]
     
-    # Only compute GradCAM for positive findings (excluding No Finding)
-    for label in positive_conditions:
-        if label == "No Finding":
-            continue
-            
-        class_idx = label_cols.index(label)
+    # Only hook gradients and compute backprop if at least one positive finding exists
+    if valid_conditions:
+        # Select single top positive condition by highest probability
+        top_label = max(valid_conditions, key=lambda c: results[c]["prob"])
+        class_idx = label_cols.index(top_label)
+        target_layer = model.backbone.norm5
+        
         cam = compute_gradcam(model, img_tensor, class_idx, target_layer)
         
-        color_rgb = CONDITION_COLORS_RGB.get(label, (255, 255, 255))
-        cam_threshold = cam_thresholds.get(label, 0.5)
+        color_rgb = CONDITION_COLORS_RGB.get(top_label, (255, 255, 255))
+        cam_threshold = cam_thresholds.get(top_label, 0.5)
         
         visual_np = overlay_and_contour(
             original_np.copy(), 
             cam, 
             cam_threshold, 
             color_rgb, 
-            label
+            top_label
         )
         
-        heatmaps[label] = numpy_to_b64(visual_np)
-        heatmap_images[label] = visual_np
-        if primary_heatmap_np is None:
-            primary_heatmap_np = visual_np.copy()
+        heatmaps[top_label] = numpy_to_b64(visual_np)
+        heatmap_images[top_label] = visual_np
+        primary_heatmap_np = visual_np
+        
+        # Explicit cleanup of cam array
+        del cam
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
 
     return {
         "all_results": results,
@@ -92,7 +98,7 @@ def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob
     }
 
 def compute_gradcam(model, img_tensor, class_idx, target_layer):
-    """Compute normalized GradCAM mask (Section 7)."""
+    """Compute normalized GradCAM mask with immediate graph and gradient cleanup."""
     gradients = []
     activations = []
 
@@ -105,13 +111,13 @@ def compute_gradcam(model, img_tensor, class_idx, target_layer):
     fh = target_layer.register_forward_hook(forward_hook)
     bh = target_layer.register_full_backward_hook(backward_hook)
 
-    # Enable gradients for backward pass on model's device
+    # Enable gradients only for backward pass on target score
     device = next(model.parameters()).device
-    img_tensor = img_tensor.to(device).clone().detach()
-    img_tensor.requires_grad_(True)
-    model.zero_grad()
+    input_tensor = img_tensor.to(device).clone().detach()
+    input_tensor.requires_grad_(True)
+    model.zero_grad(set_to_none=True)
     
-    output = model(img_tensor)
+    output = model(input_tensor)
     score  = output[0, class_idx]
     score.backward()
 
@@ -133,7 +139,16 @@ def compute_gradcam(model, img_tensor, class_idx, target_layer):
     if cam_max > 0:
         cam = cam / cam_max
         
-    return cam.detach().cpu().numpy()
+    cam_np = cam.detach().cpu().numpy()
+
+    # Immediately delete gradients and feature maps to reclaim RAM
+    del gradients, activations, grads, acts, weights, cam, output, score, input_tensor
+    model.zero_grad(set_to_none=True)
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+
+    return cam_np
 
 def overlay_and_contour(original_img_rgb, cam, cam_threshold, color_rgb, label):
     """Draw GradCAM heatmap and bounding contour on image (Section 7)."""
@@ -146,13 +161,16 @@ def overlay_and_contour(original_img_rgb, cam, cam_threshold, color_rgb, label):
     )
     heatmap_rgb = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
     overlay = cv2.addWeighted(original_img_rgb, 0.55, heatmap_rgb, 0.45, 0)
+    del heatmap, heatmap_rgb
 
     # 2. Contour extraction at cam_threshold
     thresh_val = int(cam_threshold * 255)
     _, binary = cv2.threshold(
         np.uint8(255 * cam_resized), thresh_val, 255, cv2.THRESH_BINARY
     )
+    del cam_resized
     contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    del binary
 
     if contours:
         # Pick the largest contour by area
