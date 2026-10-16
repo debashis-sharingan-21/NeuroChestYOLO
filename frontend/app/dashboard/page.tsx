@@ -1,11 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useAuthStore } from "@/lib/store";
-import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
 import { 
-  LogOut, User, Shield, Activity, Zap, 
+  Activity, Zap, 
   Upload, Scan, Brain, Crosshair, AlertCircle, 
   CheckCircle2, Info, Loader2, ArrowRight, Eye, Layers
 } from "lucide-react";
@@ -51,10 +48,6 @@ interface AnalysisResults {
 }
 
 export default function DashboardPage() {
-  const user = useAuthStore((state) => state.user);
-  const router = useRouter();
-  const supabase = createClient();
-
   // --- UI State ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -498,7 +491,7 @@ export default function DashboardPage() {
       <div className="mt-12 md:mt-20 pb-10">
         <div className="w-full flex items-center justify-center px-4 md:px-8 py-4 bg-white/[0.02] border border-white/5 rounded-container backdrop-blur-sm">
           <p className="text-white/30 font-mono text-[10px] uppercase tracking-[0.2em]">
-            // Operator: <span className="text-white/60 ml-2">{user?.email}</span>
+            // System: <span className="text-white/60 ml-2">Autonomous Neural Diagnostic Terminal</span>
           </p>
         </div>
       </div>

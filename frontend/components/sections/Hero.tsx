@@ -16,9 +16,7 @@ const IMAGES = [
 export const INTRO_END_DELAY_SEC = 0.35 + (IMAGES.length - 1) * 0.25 + 1 + 1;
 
 import Image from "next/image";
-import { useAuthStore } from "@/lib/store";
 import { usePageTransition } from "@/components/layout/PageTransition";
-import { createClient } from "@/lib/supabase/client";
 import { ChevronDown } from "lucide-react";
 
 export default function Hero() {
@@ -28,16 +26,10 @@ export default function Hero() {
   const contentRef = useRef<HTMLDivElement>(null);
   const logoRef = useRef<HTMLDivElement>(null);
 
-  const user = useAuthStore((state) => state.user);
   const { navigateTo } = usePageTransition();
-  const supabase = createClient();
 
   const handleCoreClick = async () => {
-    if (user) {
-      navigateTo("/dashboard");
-    } else {
-      navigateTo("/auth/signin");
-    }
+    navigateTo("/dashboard");
   };
 
   useEffect(() => {
@@ -240,7 +232,7 @@ export default function Hero() {
                   onClick={handleCoreClick}
                   className="flex items-center justify-center whitespace-nowrap px-8 py-4 bg-accent text-black font-bold rounded-full text-sm tracking-widest uppercase hover:bg-accent/80 focus:ring-2 focus:ring-accent focus:outline-none pl-[2.1rem] min-w-[12rem]"
                 >
-                  {user ? "Dashboard" : "Begin Analysis"}
+                  Begin Analysis
                 </button>
                 <button
                   onClick={() =>

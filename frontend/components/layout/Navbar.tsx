@@ -6,17 +6,13 @@ import { usePathname } from "next/navigation";
 import { useGSAP } from "@gsap/react";
 import { gsap, ScrollTrigger } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
-import { useAuthStore } from "@/lib/store";
 import { usePageTransition } from "./PageTransition";
-import { createClient } from "@/lib/supabase/client";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
   const pathname = usePathname();
-  // Delay navbar reveal on home page to sync with cinematic hero animation
-  const [isIntroDone, setIsIntroDone] = useState(pathname !== "/");
-  const user = useAuthStore((state) => state.user);
+  const [isIntroDone, setIsIntroDone] = useState(true);
   const navRef = useRef<HTMLDivElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
   const { navigateTo } = usePageTransition();
@@ -112,7 +108,10 @@ export default function Navbar() {
     }
   }, [scrolled]);
 
-  const navLinks = [{ label: "Performance", href: "/performance" }];
+  const navLinks = [
+    { label: "Terminal", href: "/dashboard" },
+    { label: "Performance", href: "/performance" },
+  ];
 
   return (
     <div
@@ -128,7 +127,7 @@ export default function Navbar() {
         className="flex items-center gap-4 md:gap-8 pointer-events-auto will-change-transform"
       >
         <button
-          onClick={() => navigateTo("/")}
+          onClick={() => navigateTo("/dashboard")}
           className="font-mono text-lg md:text-xl tracking-tighter text-white font-bold hover:text-accent transition-colors shrink-0"
         >
           NEURO
@@ -147,32 +146,19 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-2 md:gap-4 shrink-0">
-          {user ? (
-            pathname === "/dashboard" ? (
-              <button
-                onClick={async () => {
-                  const supabase = createClient();
-                  await supabase.auth.signOut();
-                  navigateTo("/");
-                }}
-                className="flex items-center justify-center whitespace-nowrap px-4 md:px-6 py-2 bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20 rounded-full text-[8px] md:text-[10px] font-bold tracking-widest uppercase transition-all pl-[1.1rem] md:pl-[1.6rem]"
-              >
-                Logout
-              </button>
-            ) : (
-              <button
-                onClick={() => navigateTo("/dashboard")}
-                className="flex items-center justify-center whitespace-nowrap px-4 md:px-6 py-2 bg-accent text-black rounded-full text-[8px] md:text-[10px] font-bold tracking-widest uppercase hover:bg-accent/80 transition-colors pl-[1.1rem] md:pl-[1.6rem]"
-              >
-                Interface
-              </button>
-            )
+          {pathname === "/dashboard" ? (
+            <div className="flex items-center gap-2 px-4 py-2 bg-accent/10 border border-accent/30 rounded-full">
+              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+              <span className="text-[8px] md:text-[10px] font-mono font-bold tracking-widest uppercase text-accent">
+                Terminal Live
+              </span>
+            </div>
           ) : (
             <button
-              onClick={() => navigateTo("/auth/signin")}
+              onClick={() => navigateTo("/dashboard")}
               className="flex items-center justify-center whitespace-nowrap px-4 md:px-6 py-2 bg-accent text-black rounded-full text-[8px] md:text-[10px] font-bold tracking-widest uppercase hover:bg-accent/80 transition-colors pl-[1.1rem] md:pl-[1.6rem]"
             >
-              Init
+              Terminal
             </button>
           )}
         </div>
