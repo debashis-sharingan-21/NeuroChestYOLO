@@ -244,9 +244,3 @@ docker run -p 7860:7860 neuro-backend
 - **Debashis Mohapatra**
 - Email: [debashismohapatra8260@gmail.com](mailto:debashismohapatra8260@gmail.com)
 - Year: **2026**
-
-### License & Compliance
-This project is licensed under the **Apache License 2.0**.
-- Original architecture and early prototypes: Copyright (c) 2024–2025 Sagar Sarangi.
-- Derivative works, refactored components, modular training pipelines, and retrained models: Copyright (c) 2026 Debashis Mohapatra.
-- See the [`LICENSE`](LICENSE) file for complete terms.
