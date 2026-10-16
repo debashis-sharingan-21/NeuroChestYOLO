@@ -234,17 +234,14 @@ export default function Hero() {
                 >
                   Begin Analysis
                 </button>
-                <button
-                  onClick={() =>
-                    window.open(
-                      "https://www.linkedin.com/in/sagar-sarangi",
-                      "_blank",
-                    )
-                  }
+                <a
+                  href="https://www.linkedin.com/in/debashis-mohapatra-113523302/"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="flex items-center justify-center whitespace-nowrap px-8 py-4 bg-white/10 border border-white/20 text-white font-bold rounded-full text-sm tracking-widest uppercase hover:bg-white/20 focus:ring-2 focus:ring-white focus:outline-none pl-[2.1rem]"
                 >
                   Connect
-                </button>
+                </a>
               </div>
             </div>
 
