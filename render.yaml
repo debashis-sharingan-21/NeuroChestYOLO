@@ -1,0 +1,21 @@
+# ==============================================================================
+# Render Infrastructure-as-Code Blueprint
+# Neuro CXR Diagnostic API
+# Maintainer: Debashis Mohapatra <debashismohapatra8260@gmail.com>
+# Year: 2026
+# ==============================================================================
+
+services:
+  - type: web
+    name: neuro-cxr-api
+    env: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: ALLOWED_ORIGINS
+        value: "*"
