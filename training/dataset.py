@@ -1,8 +1,4 @@
-"""
-Multi-Label Chest X-Ray Dataset & Data Transformation Pipeline.
-Author: Debashis Mohapatra <debashismohapatra8260@gmail.com>
-Year: 2026
-"""
+
 
 import os
 import torch
