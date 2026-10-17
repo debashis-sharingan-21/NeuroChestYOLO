@@ -15,20 +15,20 @@ DENSENET_TRANSFORM = transforms.Compose([
     )
 ])
 
-def preprocess_image(image_bytes, max_dim=512):
-    """Decode image bytes, downsample to max_dim (default 512), and prepare for DenseNet."""
+def preprocess_image(image_bytes, max_dim=256):
+    """Decode image bytes, downsample to max_dim (default 256), and prepare for DenseNet."""
     img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
     if max(img.size) > max_dim:
-        resample_filter = getattr(Image.Resampling, 'LANCZOS', Image.LANCZOS)
+        resample_filter = getattr(Image.Resampling, 'BILINEAR', Image.BILINEAR)
         img.thumbnail((max_dim, max_dim), resample_filter)
     tensor = DENSENET_TRANSFORM(img).unsqueeze(0)  # [1,3,224,224]
     return tensor, img
 
-def numpy_to_b64(img_rgb):
+def numpy_to_b64(img_rgb, quality=80):
     """Convert numpy RGB image to base64 string for JSON response."""
     # Convert RGB (PIL/Standard) to BGR (OpenCV)
     img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
-    _, buffer = cv2.imencode('.jpg', img_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    _, buffer = cv2.imencode('.jpg', img_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), quality])
     return base64.b64encode(buffer).decode('utf-8')
 
 def pil_to_numpy(pil_img):

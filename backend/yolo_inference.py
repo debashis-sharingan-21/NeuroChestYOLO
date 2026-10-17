@@ -61,15 +61,15 @@ def run_yolo_inference(yolo_model, original_img_pil, positive_conditions, id_to_
             "boxes_image_np": img_display
         }
 
-    # 3. Run YOLO Inference strictly under torch.no_grad()
-    yolo_device = 0 if torch.cuda.is_available() else 'cpu'
-    with torch.no_grad():
+    # 3. Run YOLO Inference strictly under torch.inference_mode()
+    with torch.inference_mode():
         preds = yolo_model.predict(
             source=original_img_pil, 
-            imgsz=target_imgsz, 
+            imgsz=256, 
             conf=conf, 
             iou=iou, 
-            device=yolo_device,
+            device="cpu",
+            half=False,
             verbose=False
         )
         results = preds[0]

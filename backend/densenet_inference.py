@@ -31,8 +31,8 @@ def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob
     device = next(model.parameters()).device
     img_tensor = img_tensor.to(device)
     
-    # 1. Standard Prediction strictly under torch.no_grad()
-    with torch.no_grad():
+    # 1. Standard Prediction strictly under torch.inference_mode()
+    with torch.inference_mode():
         logits = model(img_tensor)
         probs = torch.sigmoid(logits)[0].cpu().numpy()
     
@@ -79,7 +79,7 @@ def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob
             top_label
         )
         
-        heatmaps[top_label] = numpy_to_b64(visual_np)
+        heatmaps[top_label] = numpy_to_b64(visual_np, quality=80)
         heatmap_images[top_label] = visual_np
         primary_heatmap_np = visual_np
         
@@ -98,51 +98,43 @@ def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob
     }
 
 def compute_gradcam(model, img_tensor, class_idx, target_layer):
-    """Compute normalized GradCAM mask with immediate graph and gradient cleanup."""
-    gradients = []
+    """Compute normalized GradCAM mask with targeted autograd and immediate memory cleanup."""
     activations = []
 
     def forward_hook(module, input, output):
         activations.append(output)
 
-    def backward_hook(module, grad_in, grad_out):
-        gradients.append(grad_out[0])
-
     fh = target_layer.register_forward_hook(forward_hook)
-    bh = target_layer.register_full_backward_hook(backward_hook)
 
-    # Enable gradients only for backward pass on target score
     device = next(model.parameters()).device
-    input_tensor = img_tensor.to(device).clone().detach()
-    input_tensor.requires_grad_(True)
+    input_tensor = img_tensor.to(device)
+
     model.zero_grad(set_to_none=True)
-    
-    output = model(input_tensor)
-    score  = output[0, class_idx]
-    score.backward()
+    with torch.enable_grad():
+        output = model(input_tensor)
+        score = output[0, class_idx]
+        act = activations[0]
+        # Targeted backward gradients using torch.autograd.grad with retain_graph=False
+        grads = torch.autograd.grad(score, act, retain_graph=False)[0]
 
     fh.remove()
-    bh.remove()
 
-    grads = gradients[0][0]              # [1024, 7, 7]
-    acts  = activations[0][0]            # [1024, 7, 7]
-    
     # Weight activations by mean gradients
-    weights = grads.mean(dim=(1, 2))     # [1024]
-    cam = (weights[:, None, None] * acts).sum(dim=0)  # [7, 7]
-    
+    weights = grads[0].mean(dim=(1, 2))  # [1024]
+    cam = (weights[:, None, None] * act[0]).sum(dim=0)  # [H, W]
+
     # ReLU on CAM
     cam = torch.relu(cam)
-    
+
     # Normalize
     cam_max = cam.max()
     if cam_max > 0:
         cam = cam / cam_max
-        
+
     cam_np = cam.detach().cpu().numpy()
 
-    # Immediately delete gradients and feature maps to reclaim RAM
-    del gradients, activations, grads, acts, weights, cam, output, score, input_tensor
+    # Immediately delete tensors to reclaim memory
+    del activations, grads, act, weights, cam, output, score
     model.zero_grad(set_to_none=True)
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
@@ -153,7 +145,7 @@ def compute_gradcam(model, img_tensor, class_idx, target_layer):
 def overlay_and_contour(original_img_rgb, cam, cam_threshold, color_rgb, label):
     """Draw GradCAM heatmap and bounding contour on image (Section 7)."""
     h, w = original_img_rgb.shape[:2]
-    cam_resized = cv2.resize(cam, (w, h))
+    cam_resized = cv2.resize(cam, (w, h), interpolation=cv2.INTER_LINEAR)
 
     # 1. Heatmap overlay (Jet colormap converted to RGB)
     heatmap = cv2.applyColorMap(

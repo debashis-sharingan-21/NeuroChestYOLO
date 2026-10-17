@@ -56,7 +56,7 @@ def build_unified_response(
     if original_b64:
         clean_original_b64 = original_b64
     elif original_img_pil is not None:
-        clean_original_b64 = numpy_to_b64(pil_to_numpy(original_img_pil))
+        clean_original_b64 = numpy_to_b64(pil_to_numpy(original_img_pil), quality=80)
     else:
         clean_original_b64 = yolo_results.get('boxes_image', '')
 
@@ -74,7 +74,7 @@ def build_unified_response(
     if primary_heatmap_np is not None and len(kept_boxes) > 0:
         # Draw YOLO detection boxes on top of the Grad-CAM activation heatmap
         blended_np = draw_boxes_on_image(primary_heatmap_np, kept_boxes)
-        combined_b64 = numpy_to_b64(blended_np)
+        combined_b64 = numpy_to_b64(blended_np, quality=80)
         del blended_np
     elif primary_heatmap_b64:
         combined_b64 = primary_heatmap_b64

@@ -76,9 +76,9 @@ async def predict(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File provided is not an image")
 
     try:
-        # 1. Read and preprocess image (downsampled to 512px max to prevent OOM)
+        # 1. Read and preprocess image (downsampled to 256px max to reduce latency and memory)
         image_bytes = await file.read()
-        img_tensor, original_img_pil = preprocess_image(image_bytes, max_dim=512)
+        img_tensor, original_img_pil = preprocess_image(image_bytes, max_dim=256)
         del image_bytes
         gc.collect()
         
