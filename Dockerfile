@@ -13,12 +13,25 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-# Install system dependencies required for OpenCV
+# Install system dependencies required for OpenCV and jemalloc
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libgomp1 \
+    libjemalloc2 \
     && rm -rf /var/lib/apt/lists/*
+
+# Configure jemalloc to aggressively release unmapped memory back to the Linux kernel
+ENV LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libjemalloc.so.2
+ENV MALLOC_CONF="background_thread:true,dirty_decay_ms:1000,muzzy_decay_ms:1000"
+
+# Constrain PyTorch and OpenMP thread concurrency to prevent parallel tensor buffer allocations
+ENV OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 \
+    OPENBLAS_NUM_THREADS=1 \
+    VECLIB_MAXIMUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 \
+    TORCH_NUM_THREADS=1
 
 # Install CPU-only PyTorch and torchvision for lightweight deployment
 RUN pip install --no-cache-dir \
