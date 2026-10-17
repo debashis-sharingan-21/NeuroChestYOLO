@@ -27,6 +27,7 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing models...")
     try:
         models_registry.update(load_all_models())
+        models_registry['labels'] = models_registry.get('label_columns', [])
         logger.info("All models loaded successfully.")
     except Exception as e:
         logger.error(f"Failed to load models: {str(e)}")
@@ -57,10 +58,12 @@ def root():
 
 @app.get('/health')
 def health():
+    classes = list(models_registry.get("labels", models_registry.get("label_columns", [])))
     return {
-        "status": "ok", 
+        "status": "healthy", 
         "models_loaded": bool(models_registry),
-        "available_classes": models_registry.get('label_columns', [])
+        "available_classes": classes,
+        "device": models_registry.get("device", "cpu")
     }
 
 @app.post('/predict')

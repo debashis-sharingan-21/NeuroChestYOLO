@@ -77,7 +77,8 @@ export default function DashboardPage() {
         const res = await fetch(`${backendUrl}/health`, { method: "GET" });
         if (res.ok) {
           const data = await res.json();
-          setBackendReady(data.models_loaded === true);
+          const isHealthy = res.ok && (data.status === "ok" || data.status === "healthy") && Boolean(data.models_loaded);
+          setBackendReady(isHealthy);
         } else if (!isAnalyzingRef.current) {
           setBackendReady(false);
         }
