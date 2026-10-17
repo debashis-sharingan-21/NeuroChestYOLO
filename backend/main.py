@@ -73,11 +73,13 @@ async def predict(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File provided is not an image")
 
     try:
-        # 1. Read and preprocess image
+        # 1. Read and preprocess image (downsampled to 512px max to prevent OOM)
         image_bytes = await file.read()
-        img_tensor, original_img_pil = preprocess_image(image_bytes)
+        img_tensor, original_img_pil = preprocess_image(image_bytes, max_dim=512)
+        del image_bytes
+        gc.collect()
         
-        # 2. DenseNet Classification & GradCAM
+        # 2. DenseNet Classification & GradCAM (Sequential)
         densenet_results = run_densenet_inference(
             models_registry['densenet'],
             img_tensor,
@@ -86,8 +88,13 @@ async def predict(file: UploadFile = File(...)):
             models_registry['prob_thresholds'],
             models_registry['cam_thresholds']
         )
+        # Release DenseNet input tensor immediately
+        del img_tensor
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
         
-        # 3. YOLO Detection (Conditional)
+        # 3. YOLO Detection (Sequential, conditional)
         yolo_results = run_yolo_inference(
             models_registry['yolo'],
             original_img_pil,
@@ -119,7 +126,7 @@ async def predict(file: UploadFile = File(...)):
         )
         
         # Explicitly clean up request arrays and tensors
-        del densenet_results, yolo_results, img_tensor, original_img_pil
+        del densenet_results, yolo_results, original_img_pil
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         gc.collect()

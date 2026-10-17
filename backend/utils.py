@@ -15,9 +15,12 @@ DENSENET_TRANSFORM = transforms.Compose([
     )
 ])
 
-def preprocess_image(image_bytes):
-    """Decode image bytes and prepare for DenseNet."""
+def preprocess_image(image_bytes, max_dim=512):
+    """Decode image bytes, downsample to max_dim (default 512), and prepare for DenseNet."""
     img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
+    if max(img.size) > max_dim:
+        resample_filter = getattr(Image.Resampling, 'LANCZOS', Image.LANCZOS)
+        img.thumbnail((max_dim, max_dim), resample_filter)
     tensor = DENSENET_TRANSFORM(img).unsqueeze(0)  # [1,3,224,224]
     return tensor, img
 

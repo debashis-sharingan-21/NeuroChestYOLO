@@ -59,22 +59,32 @@ export default function DashboardPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const isAnalyzingRef = useRef(false);
+
+  useEffect(() => {
+    isAnalyzingRef.current = isAnalyzing;
+  }, [isAnalyzing]);
 
   // ── Backend Health Check (Every 3s) ───────
   useEffect(() => {
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
     
     const checkHealth = async () => {
+      // Do not poll or trigger offline state while analysis is in-flight
+      if (isAnalyzingRef.current) return;
+
       try {
         const res = await fetch(`${backendUrl}/health`, { method: "GET" });
         if (res.ok) {
           const data = await res.json();
           setBackendReady(data.models_loaded === true);
-        } else {
+        } else if (!isAnalyzingRef.current) {
           setBackendReady(false);
         }
       } catch (err) {
-        setBackendReady(false);
+        if (!isAnalyzingRef.current) {
+          setBackendReady(false);
+        }
       }
     };
 
@@ -83,18 +93,6 @@ export default function DashboardPage() {
 
     return () => clearInterval(intervalId);
   }, []);
-
-  // Cancel analysis if backend goes offline
-  useEffect(() => {
-    if (backendReady === false && isAnalyzing) {
-      abortControllerRef.current?.abort();
-      setIsAnalyzing(false);
-      setError("Backend connection lost during analysis. Please try again.");
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      setResults(null);
-    }
-  }, [backendReady, isAnalyzing]);
 
   // Auto-run analysis when a file is selected
   useEffect(() => {
@@ -141,6 +139,12 @@ export default function DashboardPage() {
     setError(null);
 
     abortControllerRef.current = new AbortController();
+    // 45-second timeout for cloud container inference
+    const timeoutId = setTimeout(() => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    }, 45000);
 
     const formData = new FormData();
     formData.append("file", selectedFile);
@@ -152,6 +156,8 @@ export default function DashboardPage() {
         body: formData,
         signal: abortControllerRef.current.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error("Failed to process image. Ensure backend is running.");
@@ -169,12 +175,15 @@ export default function DashboardPage() {
         setViewMode("original");
       }
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
+      clearTimeout(timeoutId);
+      if (err.name === 'AbortError') {
+        setError("Analysis request timed out after 45s or was cancelled. Container may be warming up or processing under high load.");
+      } else {
         setError(err.message || "An unexpected error occurred during analysis.");
-        setSelectedFile(null);
-        setPreviewUrl(null);
-        setResults(null);
       }
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      setResults(null);
     } finally {
       setIsAnalyzing(false);
       abortControllerRef.current = null;
@@ -183,8 +192,8 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-10 relative">
-      {/* Offline Modal */}
-      {backendReady === false && (
+      {/* Offline Modal - suppressed while analysis is in flight */}
+      {backendReady === false && !isAnalyzing && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl p-6 md:p-10 max-w-md w-full flex flex-col items-center text-center space-y-4 shadow-2xl">
             <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-2 animate-pulse">

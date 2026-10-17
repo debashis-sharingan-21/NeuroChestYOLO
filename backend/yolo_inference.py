@@ -33,17 +33,17 @@ def draw_boxes_on_image(image_rgb, kept_boxes):
 def run_yolo_inference(yolo_model, original_img_pil, positive_conditions, id_to_class, overlap_classes, conf, iou, imgsz=None):
     """Run YOLO detection filtered by NIH classification results (Section 8)."""
     
-    # 1. Determine image size: default 416 (memory optimized) or via YOLO_IMGSZ env var
+    # 1. Determine image size: strict 320 for low-memory container environments (<360MB RAM)
     env_imgsz = os.environ.get("YOLO_IMGSZ")
     if env_imgsz:
         try:
             target_imgsz = int(env_imgsz)
         except ValueError:
-            target_imgsz = 416
+            target_imgsz = 320
     elif imgsz is not None:
-        target_imgsz = int(imgsz)
+        target_imgsz = min(int(imgsz), 320)
     else:
-        target_imgsz = 416
+        target_imgsz = 320
 
     # 2. Determine eligible classes for detection
     normalized_positive = {normalize_label(c) for c in positive_conditions}
