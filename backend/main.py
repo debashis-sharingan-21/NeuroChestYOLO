@@ -127,6 +127,14 @@ async def predict(file: UploadFile = File(...)):
             models_registry['overlap_classes'],
             original_img_pil=original_img_pil
         )
+
+        # Optimize payload: ensure strictly the 4 primary base64 views are encoded and returned
+        response["images"] = {
+            "original_b64": response.get("images", {}).get("original_b64", ""),
+            "heatmap_b64": response.get("images", {}).get("heatmap_b64", ""),
+            "boxes_b64": response.get("images", {}).get("boxes_b64", ""),
+            "combined_b64": response.get("images", {}).get("combined_b64", "")
+        }
         
         # Explicitly clean up request arrays and tensors
         del densenet_results, yolo_results, original_img_pil

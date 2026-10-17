@@ -41,7 +41,7 @@ interface AnalysisResults {
     heatmap_b64: string;
     boxes_b64: string;
     combined_b64: string;
-    individual_heatmaps: Record<string, string>;
+    individual_heatmaps?: Record<string, string>;
   };
   yolo_boxes: YoloBox[];
   case_flags: string[];
@@ -67,27 +67,21 @@ export default function DashboardPage() {
     isAnalyzingRef.current = isAnalyzing;
   }, [isAnalyzing]);
 
-  // ── Backend Health Check (Non-blocking: UI remains permanently ready) ───────
+  // ── Backend Health Check (Strictly once on mount, no continuous polling) ────
   useEffect(() => {
-    setBackendReady(true);
-    
     const checkHealth = async () => {
-      if (isAnalyzingRef.current) return;
       try {
         const res = await fetch(`${API_URL}/health`, { method: "GET" });
         if (res.ok) {
           setBackendReady(true);
         }
       } catch (err) {
-        // Keep backendReady permanently true so the UI never locks up
+        // Fallback: keep UI unlocked
         setBackendReady(true);
       }
     };
 
-    checkHealth(); // initial probe
-    const intervalId = setInterval(checkHealth, 10000);
-
-    return () => clearInterval(intervalId);
+    checkHealth();
   }, []);
 
   // Auto-run analysis when a file is selected
@@ -139,7 +133,7 @@ export default function DashboardPage() {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
-    }, 45000);
+    }, 120000);
 
     const formData = new FormData();
     formData.append("file", selectedFile);
@@ -160,11 +154,14 @@ export default function DashboardPage() {
 
       const data = await response.json();
       setResults(data);
-      if (data.yolo_boxes && data.yolo_boxes.length > 0 && data.images && Object.keys(data.images.individual_heatmaps || {}).length > 0) {
+      const hasHeatmap = Boolean(data.images?.heatmap_b64 || (data.images?.individual_heatmaps && Object.keys(data.images.individual_heatmaps).length > 0));
+      const hasBoxes = Boolean(data.yolo_boxes && data.yolo_boxes.length > 0);
+
+      if (hasBoxes && hasHeatmap && data.images?.combined_b64) {
         setViewMode("combined");
-      } else if (data.yolo_boxes && data.yolo_boxes.length > 0) {
+      } else if (hasBoxes) {
         setViewMode("boxes");
-      } else if (data.images && Object.keys(data.images.individual_heatmaps || {}).length > 0) {
+      } else if (hasHeatmap) {
         setViewMode("heatmap");
       } else {
         setViewMode("original");
@@ -172,7 +169,7 @@ export default function DashboardPage() {
     } catch (err: any) {
       clearTimeout(timeoutId);
       if (err.name === 'AbortError') {
-        setAnalysisError("Analysis request timed out after 45 seconds. The cloud container may be cold-starting; please retry.");
+        setAnalysisError("Analyzing on cloud CPU timed out after 120 seconds. The container may be cold-starting; please retry.");
       } else {
         setAnalysisError(err.message || "An unexpected error occurred during analysis.");
       }
@@ -280,9 +277,11 @@ export default function DashboardPage() {
 
                 {/* Processing Overlay */}
                 {isAnalyzing && (
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-4">
+                  <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center gap-4 text-center px-4">
                     <Loader2 className="h-10 w-10 text-accent animate-spin" />
-                    <p className="font-mono text-xs text-accent tracking-[0.3em] uppercase animate-pulse">Running Neural Inference...</p>
+                    <p className="font-mono text-xs text-accent tracking-[0.2em] uppercase animate-pulse">
+                      Analyzing on cloud CPU (may take up to ~60s on free instance)...
+                    </p>
                   </div>
                 )}
               </div>
@@ -291,13 +290,13 @@ export default function DashboardPage() {
               {results && (
                 <div className="flex flex-wrap justify-center items-center gap-2 bg-black/40 backdrop-blur-md border border-white/10 rounded-full p-2 px-4 w-fit mx-auto mt-4">
                     <ViewBtn active={viewMode === "original"} onClick={() => setViewMode("original")} label="Raw" icon={<Eye className="h-3 w-3" />} />
-                    {Object.keys(results.images.individual_heatmaps || {}).length > 0 && (
+                    {Boolean(results.images.heatmap_b64 || (results.images.individual_heatmaps && Object.keys(results.images.individual_heatmaps).length > 0)) && (
                       <ViewBtn active={viewMode === "heatmap"} onClick={() => setViewMode("heatmap")} label="Heatmap" icon={<Brain className="h-3 w-3" />} />
                     )}
                     {results.yolo_boxes.length > 0 && (
                       <ViewBtn active={viewMode === "boxes"} onClick={() => setViewMode("boxes")} label="Detection" icon={<Crosshair className="h-3 w-3" />} />
                     )}
-                    {results.images.combined_b64 && Object.keys(results.images.individual_heatmaps || {}).length > 0 && results.yolo_boxes.length > 0 && (
+                    {results.images.combined_b64 && Boolean(results.images.heatmap_b64 || (results.images.individual_heatmaps && Object.keys(results.images.individual_heatmaps).length > 0)) && results.yolo_boxes.length > 0 && (
                       <ViewBtn active={viewMode === "combined"} onClick={() => setViewMode("combined")} label="Combined" icon={<Layers className="h-3 w-3" />} />
                     )}
                 </div>

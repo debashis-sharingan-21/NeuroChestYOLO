@@ -94,11 +94,8 @@ def build_unified_response(
         "images": {
             "original_b64": clean_original_b64,
             "heatmap_b64": primary_heatmap_b64,
-            "gradcam_b64": primary_heatmap_b64,     # Compatibility alias
             "boxes_b64": boxes_b64,
-            "yolo_b64": boxes_b64,                   # Compatibility alias
-            "combined_b64": combined_b64,
-            "individual_heatmaps": heatmaps
+            "combined_b64": combined_b64
         },
         "yolo_boxes": kept_boxes,
         "case_flags": case_flags,
