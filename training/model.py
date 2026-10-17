@@ -1,8 +1,3 @@
-"""
-Custom DenseNet Architecture with Dual Pooling Head for Multi-Label CXR.
-Author: Debashis Mohapatra <debashismohapatra8260@gmail.com>
-Year: 2026
-"""
 
 import torch
 import torch.nn as nn

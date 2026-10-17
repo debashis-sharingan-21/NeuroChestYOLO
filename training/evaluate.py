@@ -1,8 +1,3 @@
-"""
-Model Evaluation, Youden Threshold Calibration & Metric Exporter.
-Author: Debashis Mohapatra <debashismohapatra8260@gmail.com>
-Year: 2026
-"""
 
 import os
 import json

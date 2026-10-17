@@ -1,8 +1,3 @@
-"""
-End-to-End Training Engine for Multi-Label Chest X-Ray Classification.
-Author: Debashis Mohapatra <debashismohapatra8260@gmail.com>
-Year: 2026
-"""
 
 import os
 import sys
