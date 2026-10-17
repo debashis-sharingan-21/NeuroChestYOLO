@@ -63,7 +63,7 @@ def health():
         "status": "healthy", 
         "models_loaded": bool(models_registry),
         "available_classes": classes,
-        "device": models_registry.get("device", "cpu")
+        "device": str(models_registry.get("device", "cpu"))
     }
 
 @app.post('/predict')

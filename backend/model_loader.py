@@ -39,6 +39,7 @@ def load_all_models(
     thresholds_path    = 'models/thresholds_and_metrics.json',
     yolo_pt_path       = 'models/best_chestxdet.pt',
     yolo_config_path   = 'models/yolo_pipeline_config.json',
+    device             = None
 ):
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     nih_pth_path = os.path.join(base_dir, nih_pth_path)
@@ -46,7 +47,9 @@ def load_all_models(
     yolo_pt_path = os.path.join(base_dir, yolo_pt_path)
     yolo_config_path = os.path.join(base_dir, yolo_config_path)
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = torch.device(device)
 
     # 1. Load DenseNet Custom Model
     if not os.path.exists(nih_pth_path):
