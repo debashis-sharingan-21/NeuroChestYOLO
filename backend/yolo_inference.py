@@ -10,7 +10,7 @@ def draw_boxes_on_image(image_rgb, kept_boxes):
     """Draw bounding boxes and labels directly onto an RGB image."""
     canvas = image_rgb.copy()
     for box in kept_boxes:
-        name = box['class']
+        name = box.get('class_name', box.get('class', ''))
         conf_score = box['conf']
         x1, y1, x2, y2 = box['xyxy']
 
@@ -33,17 +33,8 @@ def draw_boxes_on_image(image_rgb, kept_boxes):
 def run_yolo_inference(yolo_model, original_img_pil, positive_conditions, id_to_class, overlap_classes, conf, iou, imgsz=None):
     """Run YOLO detection filtered by NIH classification results (Section 8)."""
     
-    # 1. Determine image size: strict 320 for low-memory container environments (<360MB RAM)
-    env_imgsz = os.environ.get("YOLO_IMGSZ")
-    if env_imgsz:
-        try:
-            target_imgsz = int(env_imgsz)
-        except ValueError:
-            target_imgsz = 320
-    elif imgsz is not None:
-        target_imgsz = min(int(imgsz), 320)
-    else:
-        target_imgsz = 320
+    # 1. Determine image size: strict 224 for fast low-latency container environments
+    target_imgsz = 224
 
     # 2. Determine eligible classes for detection
     normalized_positive = {normalize_label(c) for c in positive_conditions}
@@ -65,16 +56,16 @@ def run_yolo_inference(yolo_model, original_img_pil, positive_conditions, id_to_
     with torch.inference_mode():
         preds = yolo_model.predict(
             source=original_img_pil, 
-            imgsz=256, 
-            conf=conf, 
-            iou=iou, 
+            imgsz=224, 
+            conf=0.25, 
+            iou=0.45, 
+            max_det=3,
             device="cpu",
-            half=False,
             verbose=False
         )
         results = preds[0]
 
-        # 4. Filter Boxes
+        # 4. Filter Boxes: extract native Python coordinate dicts
         for box in results.boxes:
             cid = int(box.cls)
             name = id_to_class.get(str(cid))
@@ -82,14 +73,15 @@ def run_yolo_inference(yolo_model, original_img_pil, positive_conditions, id_to_
                 continue
             conf_score = float(box.conf)
                 
-            x1, y1, x2, y2 = [int(v) for v in box.xyxy[0]]
+            x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
             kept_boxes.append({
-                'class': name, 
+                'class': name,
+                'class_name': name, 
                 'conf': round(conf_score, 4), 
                 'xyxy': [x1, y1, x2, y2]
             })
 
-        # Explicitly delete prediction results to free memory
+        # Immediately invoke del results and gc.collect()
         del preds
         del results
         if torch.cuda.is_available():

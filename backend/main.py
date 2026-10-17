@@ -138,9 +138,9 @@ async def predict(file: UploadFile = File(...)):
         
         # Explicitly clean up request arrays and tensors
         del densenet_results, yolo_results, original_img_pil
+        gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-        gc.collect()
 
         return response
 

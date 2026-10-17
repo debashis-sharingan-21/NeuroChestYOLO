@@ -24,7 +24,8 @@ interface Finding {
 }
 
 interface YoloBox {
-  class: string;
+  class?: string;
+  class_name?: string;
   conf: number;
   xyxy: number[];
 }
@@ -67,9 +68,11 @@ export default function DashboardPage() {
     isAnalyzingRef.current = isAnalyzing;
   }, [isAnalyzing]);
 
-  // ── Backend Health Check (Strictly once on mount, no continuous polling) ────
+  // ── Backend Health Check (Pauses during active analysis to prevent CPU contention) ──
   useEffect(() => {
     const checkHealth = async () => {
+      // Pause completely whenever analysis is running
+      if (isAnalyzingRef.current || isAnalyzing) return;
       try {
         const res = await fetch(`${API_URL}/health`, { method: "GET" });
         if (res.ok) {
@@ -82,7 +85,7 @@ export default function DashboardPage() {
     };
 
     checkHealth();
-  }, []);
+  }, [isAnalyzing]);
 
   // Auto-run analysis when a file is selected
   useEffect(() => {
@@ -438,7 +441,7 @@ export default function DashboardPage() {
                       <div key={idx} className="space-y-2">
                         <div className="flex justify-between items-end">
                           <span className="text-white text-xs font-bold tracking-tight">
-                            {idx + 1}. {box.class}
+                            {idx + 1}. {box.class_name || box.class}
                           </span>
                           <span className="text-accent text-[10px] font-mono">{(box.conf * 100).toFixed(1)}%</span>
                         </div>

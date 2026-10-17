@@ -79,7 +79,7 @@ def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob
             top_label
         )
         
-        heatmaps[top_label] = numpy_to_b64(visual_np, quality=80)
+        heatmaps[top_label] = numpy_to_b64(visual_np, quality=75)
         heatmap_images[top_label] = visual_np
         primary_heatmap_np = visual_np
         
@@ -112,16 +112,16 @@ def compute_gradcam(model, img_tensor, class_idx, target_layer):
     model.zero_grad(set_to_none=True)
     with torch.enable_grad():
         output = model(input_tensor)
-        score = output[0, class_idx]
-        act = activations[0]
+        target_score = output[0, class_idx]
+        target_activations = activations[0]
         # Targeted backward gradients using torch.autograd.grad with retain_graph=False
-        grads = torch.autograd.grad(score, act, retain_graph=False)[0]
+        grads = torch.autograd.grad(target_score, target_activations, retain_graph=False)[0]
 
     fh.remove()
 
     # Weight activations by mean gradients
     weights = grads[0].mean(dim=(1, 2))  # [1024]
-    cam = (weights[:, None, None] * act[0]).sum(dim=0)  # [H, W]
+    cam = (weights[:, None, None] * target_activations[0]).sum(dim=0)  # [H, W]
 
     # ReLU on CAM
     cam = torch.relu(cam)
@@ -133,8 +133,9 @@ def compute_gradcam(model, img_tensor, class_idx, target_layer):
 
     cam_np = cam.detach().cpu().numpy()
 
-    # Immediately delete tensors to reclaim memory
-    del activations, grads, act, weights, cam, output, score
+    # Immediately invoke del target_score, target_activations, grads and call gc.collect()
+    del target_score, target_activations, grads
+    del activations, weights, cam, output, input_tensor
     model.zero_grad(set_to_none=True)
     if torch.cuda.is_available():
         torch.cuda.empty_cache()

@@ -24,7 +24,7 @@ def preprocess_image(image_bytes, max_dim=256):
     tensor = DENSENET_TRANSFORM(img).unsqueeze(0)  # [1,3,224,224]
     return tensor, img
 
-def numpy_to_b64(img_rgb, quality=80):
+def numpy_to_b64(img_rgb, quality=75):
     """Convert numpy RGB image to base64 string for JSON response."""
     # Convert RGB (PIL/Standard) to BGR (OpenCV)
     img_bgr = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2BGR)
