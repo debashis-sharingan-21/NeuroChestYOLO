@@ -26,15 +26,22 @@ CONDITION_COLORS_RGB = {
 }
 
 def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob_thresholds, cam_thresholds):
-    """Run DenseNet inference with memory optimization for constrained environments."""
+    """Run DenseNet inference with forward linear CAM (zero autograd overhead)."""
     model.eval()
     device = next(model.parameters()).device
     img_tensor = img_tensor.to(device)
     
-    # 1. Standard Prediction strictly under torch.inference_mode()
+    # 1. Forward Pass with feature map hook strictly under torch.inference_mode()
+    features = None
+    def hook(module, input, output):
+        nonlocal features
+        features = output
+    handle = model.backbone.norm5.register_forward_hook(hook)
+
     with torch.inference_mode():
         logits = model(img_tensor)
         probs = torch.sigmoid(logits)[0].cpu().numpy()
+    handle.remove()
     
     # 2. Process Results
     results = {}
@@ -51,7 +58,7 @@ def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob
             "positive": is_positive
         }
     
-    # 3. GradCAM & Visualization: restricted to single top positive condition
+    # 3. Forward Linear CAM: Zero backward autograd overhead
     original_np = pil_to_numpy(original_img_pil)
     heatmaps = {}
     primary_heatmap_np = None
@@ -59,21 +66,28 @@ def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob
     
     valid_conditions = [c for c in positive_conditions if c != "No Finding"]
     
-    # Only hook gradients and compute backprop if at least one positive finding exists
     if valid_conditions:
         # Select single top positive condition by highest probability
         top_label = max(valid_conditions, key=lambda c: results[c]["prob"])
         class_idx = label_cols.index(top_label)
-        target_layer = model.backbone.norm5
         
-        cam = compute_gradcam(model, img_tensor, class_idx, target_layer)
+        with torch.inference_mode():
+            # model.classifier is Linear(2048, 15)
+            # Dual pooling uses first 1024 weights for GAP
+            weights = model.classifier.weight[class_idx][:1024]
+            feat_map = features[0]
+            cam = torch.einsum('c,chw->hw', weights, feat_map)
+            cam = torch.relu(cam)
+            if cam.max() > 0:
+                cam = cam / cam.max()
+            cam_np = cam.cpu().numpy()
         
         color_rgb = CONDITION_COLORS_RGB.get(top_label, (255, 255, 255))
         cam_threshold = cam_thresholds.get(top_label, 0.5)
         
         visual_np = overlay_and_contour(
             original_np.copy(), 
-            cam, 
+            cam_np, 
             cam_threshold, 
             color_rgb, 
             top_label
@@ -84,7 +98,7 @@ def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob
         primary_heatmap_np = visual_np
         
         # Explicit cleanup of cam array
-        del cam
+        del cam, cam_np, features
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
         gc.collect()
@@ -97,51 +111,31 @@ def run_densenet_inference(model, img_tensor, original_img_pil, label_cols, prob
         "heatmap_images": heatmap_images
     }
 
-def compute_gradcam(model, img_tensor, class_idx, target_layer):
-    """Compute normalized GradCAM mask with targeted autograd and immediate memory cleanup."""
-    activations = []
+def compute_forward_cam(model, img_tensor, class_idx):
+    """Compute forward linear Class Activation Map (CAM) without backward autograd."""
+    features = None
+    def hook(module, input, output):
+        nonlocal features
+        features = output
+    handle = model.backbone.norm5.register_forward_hook(hook)
+    
+    with torch.inference_mode():
+        logits = model(img_tensor)
+        handle.remove()
+        
+        # model.classifier is Linear(2048, 15)
+        # Dual pooling uses first 1024 weights for GAP
+        weights = model.classifier.weight[class_idx][:1024]  # shape: [1024]
+        feat_map = features[0]  # shape: [1024, H, W]
+        
+        # Weighted combination:
+        cam = torch.einsum('c,chw->hw', weights, feat_map)
+        cam = torch.relu(cam)
+        if cam.max() > 0:
+            cam = cam / cam.max()
+        return cam.cpu().numpy()
 
-    def forward_hook(module, input, output):
-        activations.append(output)
-
-    fh = target_layer.register_forward_hook(forward_hook)
-
-    device = next(model.parameters()).device
-    input_tensor = img_tensor.to(device)
-
-    model.zero_grad(set_to_none=True)
-    with torch.enable_grad():
-        output = model(input_tensor)
-        target_score = output[0, class_idx]
-        target_activations = activations[0]
-        # Targeted backward gradients using torch.autograd.grad with retain_graph=False
-        grads = torch.autograd.grad(target_score, target_activations, retain_graph=False)[0]
-
-    fh.remove()
-
-    # Weight activations by mean gradients
-    weights = grads[0].mean(dim=(1, 2))  # [1024]
-    cam = (weights[:, None, None] * target_activations[0]).sum(dim=0)  # [H, W]
-
-    # ReLU on CAM
-    cam = torch.relu(cam)
-
-    # Normalize
-    cam_max = cam.max()
-    if cam_max > 0:
-        cam = cam / cam_max
-
-    cam_np = cam.detach().cpu().numpy()
-
-    # Immediately invoke del target_score, target_activations, grads and call gc.collect()
-    del target_score, target_activations, grads
-    del activations, weights, cam, output, input_tensor
-    model.zero_grad(set_to_none=True)
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-    gc.collect()
-
-    return cam_np
+compute_gradcam = compute_forward_cam
 
 def overlay_and_contour(original_img_rgb, cam, cam_threshold, color_rgb, label):
     """Draw GradCAM heatmap and bounding contour on image (Section 7)."""

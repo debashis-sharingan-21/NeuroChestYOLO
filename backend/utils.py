@@ -15,8 +15,8 @@ DENSENET_TRANSFORM = transforms.Compose([
     )
 ])
 
-def preprocess_image(image_bytes, max_dim=256):
-    """Decode image bytes, downsample to max_dim (default 256), and prepare for DenseNet."""
+def preprocess_image(image_bytes, max_dim=224):
+    """Decode image bytes, downsample to max_dim (default 224), and prepare for DenseNet."""
     img = Image.open(io.BytesIO(image_bytes)).convert('RGB')
     if max(img.size) > max_dim:
         resample_filter = getattr(Image.Resampling, 'BILINEAR', Image.BILINEAR)

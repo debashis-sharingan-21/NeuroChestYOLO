@@ -58,7 +58,6 @@ def run_yolo_inference(yolo_model, original_img_pil, positive_conditions, id_to_
             source=original_img_pil, 
             imgsz=224, 
             conf=0.25, 
-            iou=0.45, 
             max_det=3,
             device="cpu",
             verbose=False
