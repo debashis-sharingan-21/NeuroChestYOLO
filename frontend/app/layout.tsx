@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Sora, Instrument_Serif, Fira_Code } from "next/font/google";
 import "./globals.css";
 import LenisProvider from "@/components/layout/LenisProvider";
-import AuthInitializer from "@/components/layout/AuthInitializer";
 import { cn } from "@/lib/utils";
 import { Analytics } from "@vercel/analytics/next";
 
@@ -50,7 +49,6 @@ export default function RootLayout({
           "antialiased bg-primary text-foreground min-h-screen"
         )}
       >
-        <AuthInitializer />
         <LenisProvider>
           <PageTransition>
             <div className="noise-overlay" />

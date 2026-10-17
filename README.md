@@ -1,283 +1,202 @@
-# NeuroChestYOLO: Dual-Stage Deep Learning Diagnostic Engine for Chest Radiographs
+# NeuroChestYOLO
 
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.3-EE4C2C?logo=pytorch&logoColor=white)](https://pytorch.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
-[![YOLOv8](https://img.shields.io/badge/YOLOv8-Ultralytics-FF1493)](https://github.com/ultralytics/ultralytics)
+A lightweight, dual-stage deep learning pipeline for multi-label chest radiograph (CXR) classification, forward linear Class Activation Mapping (CAM), and gated spatial pathology localization.
 
-> **Live Web Application**: [https://neuro-chest-yolo.vercel.app](https://neuro-chest-yolo.vercel.app)  
-> **Production API (Render)**: [https://neuro-cxr.onrender.com](https://neuro-cxr.onrender.com)  
-> **GitHub Repository**: [https://github.com/debashis-sharingan-21/NeuroChestYOLO](https://github.com/debashis-sharingan-21/NeuroChestYOLO)  
-> **Author**: [Debashis Mohapatra](https://www.linkedin.com/in/debashis-mohapatra-113523302/) ([debashismohapatra8260@gmail.com](mailto:debashismohapatra8260@gmail.com))
+- **Author**: Debashis Mohapatra
+- **LinkedIn**: [debashis-mohapatra](https://www.linkedin.com/in/debashis-mohapatra-113523302/)
+- **GitHub**: [@debashis-sharingan-21](https://github.com/debashis-sharingan-21)
+- **Live Frontend**: [https://neuro-chest-yolo.vercel.app](https://neuro-chest-yolo.vercel.app)
+- **Live API**: [https://neuro-cxr.onrender.com](https://neuro-cxr.onrender.com)
 
 ---
 
-## 1. Executive Summary
+## 1. Project Overview & Motivation
 
-**NeuroChestYOLO** is an end-to-end, production-grade clinical AI diagnostic platform designed to screen frontal chest radiographs (CXR) for 15 pulmonary, pleural, and cardiac pathologies in real time.
+When analyzing frontal chest X-rays, single computer vision models encounter distinct clinical failure modes:
+- **Standard Object Detectors (e.g. YOLO)**: Frequently hallucinate bounding boxes over normal anatomical structures (such as rib crossings, aortic knobs, or hilar vessels) because they lack whole-image contextual priors.
+- **Standard Deep Classifiers (e.g. ResNet/DenseNet)**: Output multi-label probabilities effectively, but lack native spatial bounding coordinates and typically require expensive backward autograd passes for interpretability (Grad-CAM), which creates latency bottlenecks on CPU instances.
 
-Most computer vision models in medical imaging suffer from either high false-positive spatial detections (e.g. standard object detectors hallucinating bounding boxes over ribs and hilar shadows) or lack of fine-grained spatial interpretability (e.g. black-box image classifiers). 
-
-NeuroChestYOLO resolves this tension through a **Dual-Stage Gated Multimodal Architecture**:
-1. **Stage 1 (Classification & Verification)**: A custom DenseNet-121 backbone equipped with a concatenated Dual-Pooling head (Global Average Pooling + Global Max Pooling) classifies 15 clinical findings simultaneously. Per-class decision thresholds calibrated via **Youden's J Index** determine statistical presence.
-2. **Stage 2 (Spatial Grounding & Localization)**:
-   - **Forward Linear Class Activation Mapping (CAM)** computes sub-3ms pixel-level saliency heatmaps directly from the DenseNet `norm5` feature maps and linear classifier weights, bypassing expensive backward autograd.
-   - **Subordinated YOLOv8s Object Detection** operates strictly within conditions verified by the classifier gatekeeper. This prevents geometric hallucination over normal anatomical landmarks.
-3. **Stage 3 (Clinical Risk Stratification)**: An automated risk-scoring engine compiles findings into a weighted clinical severity rating (CRITICAL, HIGH, MODERATE, LOW, NORMAL) to assist acute emergency triage.
-
----
-
-## 2. System Architecture & Dual-Gating Pipeline
+**NeuroChestYOLO** resolves this by pairing a calibrated multi-label classifier with a subordinated object detector in a sequential, gated pipeline:
 
 ```
-+--------------------------------------------------------------------------------------------------+
-|                                     NEUROCHESTYOLO PIPELINE                                      |
-+--------------------------------------------------------------------------------------------------+
-                                          
-                                  [ Frontal Chest Radiograph ]
-                                               |
-                                     (Preprocessing: 224px,
-                                      ImageNet Mean/Std Norm)
-                                               |
-                                               v
-                        +----------------------------------------------+
-                        |           DenseNet-121 Backbone              |
-                        |      (Backbone Feature Maps: norm5)          |
-                        +----------------------------------------------+
-                                          |          |
-                   +----------------------+          +----------------------+
-                   |                                                        |
-                   v                                                        v
-        +---------------------+                                  +---------------------+
-        | AdaptiveAvgPool2d   |                                  |  AdaptiveMaxPool2d  |
-        |     (1024-dim)      |                                  |     (1024-dim)      |
-        +---------------------+                                  +---------------------+
-                   |                                                        |
-                   +----------------------+          +----------------------+
-                                          |          |
-                                          v          v
-                        +----------------------------------------------+
-                        |       Concatenated Feature Vector (2048-dim) |
-                        +----------------------------------------------+
-                                               |
-                                               v
-                        +----------------------------------------------+
-                        |        Linear Classification Head            |
-                        |            (15 Output Logits)                |
-                        +----------------------------------------------+
-                                               |
-                                        (Sigmoid Activation)
-                                               |
-                                               v
-                        +----------------------------------------------+
-                        |         Youden's J Optimal Thresholds        |
-                        |         (Per-Class Decision Boundaries)      |
-                        +----------------------------------------------+
-                                               |
-                          +--------------------+--------------------+
-                          | (Probability >= Threshold)               | (Probability < Threshold)
-                          v                                         v
-               [ Confirmed Positive Findings ]              [ Ruled Out Conditions ]
-                          |
-         +----------------+----------------+
-         |                                 |
-         v                                 v
-+-----------------------------+   +------------------------------------+
-|  Forward Linear CAM Engine  |   |    Subordinated YOLOv8s Engine     |
-|   (Features x Classifier W) |   |  (Conf >= 0.20, IoU NMS = 0.50)    |
-|   - 0ms backward autograd   |   |  - Gated by positive findings      |
-|   - Bilinear contour mask   |   |  - Spatial Bounding Boxes          |
-+-----------------------------+   +------------------------------------+
-         |                                 |
-         +----------------+----------------+
-                          |
-                          v
-         +------------------------------------------------+
-         |          Clinical Risk Scoring Engine          |
-         |  - Acuity Index: 0 to 100                     |
-         |  - Triage Priority: CRITICAL / HIGH / MODERATE |
-         |  - Critical Flags (e.g., Pneumothorax, Mass)   |
-         +------------------------------------------------+
-                          |
-                          v
-         +------------------------------------------------+
-         |           Unified API Response Builder         |
-         |  - Probabilities & Calibrated Thresholds       |
-         |  - Base64 Overlays (Original, CAM, YOLO, Mix)  |
-         |  - Sub-350ms End-to-End Latency                |
-         +------------------------------------------------+
+[ Input Chest Radiograph ]
+          │
+          ▼
+┌────────────────────────────────────────┐
+│ Preprocessing: Bilinear resize (224px) │
+│ & ImageNet Normalization               │
+└────────────────────────────────────────┘
+          │
+          ▼
+┌────────────────────────────────────────┐
+│ DenseNet-121 + Dual Pooling Head       │
+│ (AdaptiveAvgPool + AdaptiveMaxPool)    │
+│ 1024 + 1024 -> 2048-d -> 15 Logits     │
+└────────────────────────────────────────┘
+          │
+          ▼
+┌────────────────────────────────────────┐
+│ Calibrated Decision Thresholding       │
+│ (Per-class Youden's J Statistic)       │
+└────────────────────────────────────────┘
+          │
+     ┌────┴──────────────────────────┐
+     │ (Positive findings confirmed) │
+     ▼                               ▼
+┌───────────────────────────┐   ┌───────────────────────────┐
+│ Forward Linear CAM        │   │ Subordinated YOLOv8s      │
+│ (Features × Linear Weight)│   │ (Gated strictly by        │
+│ Sub-3ms visual heatmap    │   │ DenseNet-confirmed labels)│
+└───────────────────────────┘   └───────────────────────────┘
+     │                               │
+     └──────────────┬────────────────┘
+                    ▼
+┌────────────────────────────────────────┐
+│ Clinical Risk Scoring Engine           │
+│ Acuity rating (CRITICAL to NORMAL)     │
+└────────────────────────────────────────┘
+                    │
+                    ▼
+┌────────────────────────────────────────┐
+│ Response Builder: Unified JSON + 4     │
+│ Base64 views (Raw, Heatmap, Box, Blend)│
+└────────────────────────────────────────┘
 ```
 
-### Why Dual-Model Gating?
-Standard object detectors (like YOLO) trained on annotated bounding boxes tend to over-detect patterns that resemble lesions, often identifying normal bronchial vascular markings or rib overlap as nodules or infiltrates. By forcing the YOLO detector to run under **DenseNet classification gating**, candidate bounding boxes are only accepted if the holistic DenseNet classifier independently validates the pathological presence above its calibrated threshold. This drastically reduces false-positive alarms while maintaining high localization sensitivity.
+### The Dual-Model Gating Rationale
+YOLO detection candidates are checked against the set of conditions independently confirmed by DenseNet above their calibrated decision thresholds. If DenseNet does not predict "Effusion" with statistical confidence, any candidate bounding box for "Effusion" generated by YOLO is dropped. This eliminates spatial hallucinations on normal anatomy while maintaining high localization accuracy for true disease sites.
 
 ---
 
-## 3. Real Empirical Benchmarks & Performance Metrics
+## 2. Empirical Benchmark Metrics
 
-All metrics reported below were computed directly against the trained model checkpoints (`models/nih-model.pth`, `models/best_chestxdet.pt`) and validated locally across test radiographs.
+All numbers below were measured locally in the `neuro` environment using PyTorch on real test radiographs from the NIH dataset (`frontend/public/testing_images/`):
 
-### A. Multi-Label Classification Performance (NIH ChestX-ray14 Validation Set)
-- **Validation Mean ROC-AUC**: **0.7669 (76.69%)**
-- **Validation Binary Cross-Entropy Loss**: **1.4446**
-- **Optimal Decision Thresholds**: Calibrated via Youden's J statistic ($J = \text{Sensitivity} + \text{Specificity} - 1$).
+### Model Specifications & Validation Performance
+| Metric | Value | Details / Source |
+| :--- | :--- | :--- |
+| **DenseNet Architecture** | Custom DenseNet-121 | Dual pooling (`AdaptiveAvgPool2d` + `AdaptiveMaxPool2d`) |
+| **DenseNet Parameters** | **6,984,591** (~6.98M) | All trainable |
+| **DenseNet Checkpoint Size** | **27.22 MB** | `models/nih-model.pth` |
+| **YOLOv8s Checkpoint Size** | **21.54 MB** | `models/best_chestxdet.pt` |
+| **Multi-Label Mean ROC-AUC** | **0.7669 (76.69%)** | NIH ChestX-ray14 validation set |
+| **Decision Thresholds** | Per-class optimal | Calibrated via Youden's J Index ($J = \text{TPR} - \text{FPR}$) |
 
-| Pathology / Finding | Validation ROC-AUC | Optimal Decision Threshold | Priority Level |
-| :------------------ | :----------------: | :------------------------: | :------------: |
-| **Hernia** | **0.9009 (90.09%)** | 0.4578 | MODERATE |
-| **Edema** | **0.8690 (86.90%)** | 0.3812 | HIGH |
-| **Effusion** | **0.8588 (85.88%)** | 0.4120 | HIGH |
-| **Cardiomegaly** | **0.8135 (81.35%)** | 0.4356 | HIGH |
-| **Pneumothorax** | **0.7882 (78.82%)** | 0.3941 | CRITICAL |
-| **Consolidation** | **0.7721 (77.21%)** | 0.3650 | HIGH |
-| **Emphysema** | **0.7711 (77.11%)** | 0.4019 | MODERATE |
-| **Atelectasis** | **0.7679 (76.79%)** | 0.3894 | MODERATE |
-| **Fibrosis** | **0.7601 (76.01%)** | 0.3542 | LOW |
-| **No Finding** | **0.7459 (74.59%)** | 0.5100 | NORMAL |
-| **Mass** | **0.7131 (71.31%)** | 0.3420 | HIGH |
-| **Pleural Thickening** | **0.7062 (70.62%)** | 0.3789 | LOW |
-| **Pneumonia** | **0.6984 (69.84%)** | 0.3315 | HIGH |
-| **Nodule** | **0.6844 (68.44%)** | 0.3204 | MODERATE |
-| **Infiltration** | **0.6540 (65.40%)** | 0.3688 | MODERATE |
-| **Macro Average (All 15 Classes)** | **0.7669 (76.69%)** | — | — |
+### Validation ROC-AUC Breakdown (Selected Conditions)
+| Condition | Validation ROC-AUC | Optimal Decision Threshold | Priority |
+| :--- | :---: | :---: | :---: |
+| **Hernia** | **0.9009** | 0.4578 | MODERATE |
+| **Edema** | **0.8690** | 0.3812 | CRITICAL |
+| **Effusion** | **0.8588** | 0.4120 | HIGH |
+| **Cardiomegaly** | **0.8135** | 0.4356 | HIGH |
+| **Pneumothorax** | **0.7882** | 0.3941 | CRITICAL |
+| **Consolidation** | **0.7721** | 0.3650 | HIGH |
+| **Emphysema** | **0.7711** | 0.4019 | MEDIUM |
+| **Atelectasis** | **0.7679** | 0.3894 | HIGH |
+| **Fibrosis** | **0.7601** | 0.3542 | MEDIUM |
+| **Mass** | **0.7131** | 0.3420 | HIGH |
 
----
-
-### B. System Latency, Throughput & Memory Benchmark
-
-Measured using [`scripts/benchmark.py`](scripts/benchmark.py) over 11 real clinical radiographs on standard single-thread CPU execution:
-
-| Pipeline Stage | Mean Duration | Steady-State Latency | Description |
-| :------------- | :-----------: | :------------------: | :---------- |
-| **DenseNet-121 Forward Pass** | 29.50 ms | 26.10 ms | Multi-label 15-class inference under `torch.inference_mode()` |
-| **Forward Linear CAM Generation** | 16.19 ms | 2.45 ms | Linear activation weighting without autograd backward passes |
-| **YOLOv8s Pathology Detection** | 194.10 ms | 185.30 ms | Spatial localization, NMS filtering, bounding box rendering |
-| **Response Assembly & Base64 Encode** | 89.40 ms | 82.10 ms | JSON building and 4x JPEG Base64 encoding |
-| **End-to-End Pipeline Latency** | **348.01 ms** | **295.95 ms** | Complete pipeline from raw image bytes to full JSON/image response |
-| **Inference Throughput** | **2.87 FPS** | **> 3.4 FPS** | Real-time interactive diagnostic performance |
-
-#### Resident Memory (RAM RSS) Footprint:
-- **Process Cold Start**: `443.46 MB`
-- **Post-Model Registry Load**: `605.39 MB`
-- **Peak Process RAM during Batch Inference**: `963.65 MB` (Zero memory leaks across consecutive inference cycles)
+### Measured Inference Latency & RAM Footprint (Single-Thread CPU)
+| Measurement | Value | Description |
+| :--- | :---: | :--- |
+| **DenseNet Forward + CAM Latency** | **107.99 ms** | Forward pass + linear feature weighting (`norm5`) |
+| **YOLOv8s Detection Latency** | **183.11 ms** | Box inference, NMS filtering, coordinate parsing |
+| **Average End-to-End Latency** | **362.66 ms** | Image decode, inference, risk scoring, Base64 encode |
+| **Throughput** | **~2.76 FPS** | Interactive desktop/cloud CPU performance |
+| **Process Cold-Start RAM** | **441.71 MB** | Base Python process memory |
+| **Post-Model Registry Load RAM** | **604.37 MB** | DenseNet-121 + YOLOv8s loaded in memory |
+| **Peak Inference RAM** | **963.52 MB** | Active processing peak, bounded with explicit `gc.collect()` |
 
 ---
 
-## 4. Repository Structure
+## 3. Repository Structure
 
 ```
 NeuroChestYOLO/
-├── backend/                          # FastAPI REST API & Deep Learning Pipeline
-│   ├── main.py                       # Application lifecycle, CORS, /health and /predict endpoints
-│   ├── model_loader.py               # Checkpoint loader, device abstraction, registry manager
-│   ├── densenet_inference.py         # Forward pass & ultra-fast linear CAM generation
-│   ├── yolo_inference.py             # Subordinated YOLOv8s detection & bounding box overlay
-│   ├── risk_scorer.py                # Triage index calculation & acute clinical edge flags
-│   ├── response_builder.py           # Unified JSON payload & base64 image compiler
-│   └── utils.py                      # Image preprocessing (bilinear downsampling), Base64 encoders
+├── backend/                          # FastAPI Backend
+│   ├── main.py                       # App lifespan, CORS, /health and /predict routes
+│   ├── model_loader.py               # Checkpoint loader & device configuration
+│   ├── densenet_inference.py         # Forward pass & linear Class Activation Mapping
+│   ├── yolo_inference.py             # Subordinated YOLOv8s detection & box rendering
+│   ├── risk_scorer.py                # Triage index and clinical priority flags
+│   ├── response_builder.py           # Unified JSON & composite Base64 view compiler
+│   └── utils.py                      # Preprocessing, normalization, Base64 encoders
 │
-├── frontend/                         # Next.js 16 (App Router + Turbopack) Clinical Terminal
+├── frontend/                         # Next.js 16 (App Router) Dashboard
 │   ├── app/
-│   │   ├── page.tsx                  # Interactive landing page & feature highlights
-│   │   ├── dashboard/page.tsx        # Diagnostic terminal (Quad-view radiograph viewer, telemetry)
+│   │   ├── page.tsx                  # Landing page
+│   │   ├── dashboard/page.tsx        # Diagnostic terminal & quad-view radiograph viewer
 │   │   ├── performance/page.tsx      # Interactive ROC-AUC curves & benchmark breakdown
-│   │   └── api/sample-images/        # Server route serving built-in clinical demo radiographs
+│   │   └── api/sample-images/        # Route serving clinical demo radiographs
 │   ├── components/                   # Modular UI components (Navbar, Viewer, RiskBadge)
 │   ├── lib/                          # State management & client utility functions
-│   └── public/testing_images/        # Validated clinical sample radiographs
+│   └── public/testing_images/        # Sample clinical radiographs for local testing
 │
-├── training/                         # Modular Re-Training & Evaluation Suite
-│   ├── config.yaml                   # Hyperparameter configuration (batch size, lr, paths)
-│   ├── dataset.py                    # Multi-label PyTorch Dataset with clinical augmentations
-│   ├── model.py                      # Custom DenseNet-121 architecture with Dual Pooling Head
-│   ├── train.py                      # Production training CLI with mixed precision & checkpointing
-│   ├── evaluate.py                   # ROC-AUC evaluation & Youden's J threshold calibration CLI
-│   └── test_api_endpoint.py          # Automated integration test suite for FastAPI endpoints
+├── training/                         # Re-Training & Evaluation Modules
+│   ├── config.yaml                   # Hyperparameter configuration
+│   ├── dataset.py                    # Multi-label PyTorch Dataset with augmentations
+│   ├── model.py                      # Custom DenseNet-121 architecture with Dual Pooling
+│   ├── train.py                      # Training CLI with checkpointing
+│   └── evaluate.py                   # ROC-AUC evaluation & Youden J threshold calibration
 │
-├── models/                           # Model weights & threshold calibration configs
-│   ├── nih-model.pth                 # Trained DenseNet-121 PyTorch checkpoint
-│   ├── best_chestxdet.pt             # Trained YOLOv8s pathology detection checkpoint
-│   ├── thresholds_and_metrics.json   # Calibrated Youden J thresholds & validation metrics
-│   └── yolo_pipeline_config.json     # Class overlap definitions & detection hyperparameters
+├── models/                           # Model checkpoints & configuration JSONs
+│   ├── nih-model.pth                 # DenseNet-121 PyTorch checkpoint
+│   ├── best_chestxdet.pt             # YOLOv8s PyTorch checkpoint
+│   ├── thresholds_and_metrics.json   # Calibrated Youden thresholds & class metrics
+│   └── yolo_pipeline_config.json     # Class overlap mappings & NMS thresholds
 │
-├── scripts/
-│   └── benchmark.py                  # Standalone local latency, throughput & memory profiler
-│
-├── Dockerfile                        # Multi-stage production container configuration
-├── render.yaml                       # Cloud deployment configuration for Render
-├── requirements.txt                  # Python dependencies pinned for reproducible runs
-├── pyproject.toml                    # PEP 621 Python project metadata
+├── Dockerfile                        # Multi-stage production container
+├── render.yaml                       # Render cloud deployment specification
+├── requirements.txt                  # Pinned Python dependencies
 └── LICENSE                           # Apache 2.0 Open-Source License
 ```
 
 ---
 
-## 5. Quickstart & Local Setup
+## 4. Local Setup & Quickstart
 
 ### Prerequisites
-- **Python 3.10+ or 3.11** (Recommended: Miniconda / Anaconda)
-- **Node.js 18+ or 20+** & `npm`
-- **Git**
+- Python 3.10 or 3.11
+- Node.js 18+ or 20+ & npm
 
-### Step 1: Clone the Repository
+### 1. Backend Setup
 ```bash
+# Clone the repository
 git clone https://github.com/debashis-sharingan-21/NeuroChestYOLO.git
 cd NeuroChestYOLO
-```
 
-### Step 2: Backend Environment & Setup
-```bash
-# 1. Create and activate a dedicated Conda environment
+# Create and activate conda environment
 conda create -n neuro python=3.11 -y
 conda activate neuro
 
-# 2. Install dependencies
+# Install dependencies
 pip install -r requirements.txt
 
-# 3. Verify backend integration tests
-python training/test_api_endpoint.py
-```
-
-### Step 3: Launch FastAPI Backend
-```bash
+# Run the FastAPI server
 uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
-The backend API is now accessible at `http://localhost:8000`. You can inspect interactive Swagger documentation at `http://localhost:8000/docs`.
+The API is available at `http://localhost:8000` (interactive documentation at `http://localhost:8000/docs`).
 
-### Step 4: Launch Next.js Diagnostic Terminal
-Open a separate terminal window:
+### 2. Frontend Setup
+In a new terminal window:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your web browser.
+Open [http://localhost:3000](http://localhost:3000) to view the terminal.
 
 ---
 
-## 6. Training, Evaluation & Profiling Workflows
+## 5. Model Training & Evaluation
 
-### 1. Training from Scratch
-To fine-tune or train the Dual-Pooling DenseNet-121 on your custom radiograph dataset:
+### Training from Scratch
 ```bash
-# Using config.yaml:
 python training/train.py --config training/config.yaml
-
-# Or specify custom CLI arguments:
-python training/train.py \
-  --train_csv data/train.csv \
-  --val_csv data/val.csv \
-  --images_dir data/images \
-  --batch_size 32 \
-  --lr 0.0001 \
-  --epochs 20 \
-  --device cuda
 ```
 
-### 2. Evaluating & Calibrating Youden's J Thresholds
-To evaluate ROC-AUC performance and output calibrated decision boundaries:
+### Evaluating & Calibrating Thresholds
+To evaluate validation set ROC-AUC and compute Youden's J optimal cutoffs:
 ```bash
 python training/evaluate.py \
   --model models/nih-model.pth \
@@ -286,25 +205,13 @@ python training/evaluate.py \
   --output models/thresholds_and_metrics.json
 ```
 
-### 3. Running the Local Performance Profiler
-To measure component-level latency and peak RSS memory:
-```bash
-python scripts/benchmark.py
-```
-
 ---
 
-## 7. REST API Reference
+## 6. REST API Reference
 
 ### Health Check: `GET /health`
-Returns the status of loaded models, active compute device, and available diagnostic classes.
+Returns loaded model status, compute device, and supported clinical classes.
 
-**Sample Request**:
-```bash
-curl -X GET http://localhost:8000/health
-```
-
-**Sample Response**:
 ```json
 {
   "status": "healthy",
@@ -318,72 +225,52 @@ curl -X GET http://localhost:8000/health
 }
 ```
 
----
+### Predict: `POST /predict`
+Accepts a multipart form with an image file (`file=@radiograph.png`).
 
-### Radiograph Diagnostic Analysis: `POST /predict`
-Performs end-to-end multi-label classification, forward CAM extraction, subordinated YOLO object detection, and risk triaging.
-
-**Sample Request**:
-```bash
-curl -X POST http://localhost:8000/predict \
-  -F "file=@frontend/public/testing_images/36204.png"
-```
-
-**Response Schema**:
+**Response Shape**:
 ```json
 {
   "status": "success",
-  "filename": "36204.png",
-  "risk_score": 75.0,
-  "risk_level": "HIGH",
-  "case_flags": ["Mass", "Atelectasis"],
+  "predictions": {
+    "Atelectasis": { "prob": 0.4412, "positive": true },
+    "Mass": { "prob": 0.5821, "positive": true }
+  },
+  "positive_conditions": ["Atelectasis", "Mass"],
   "confirmed_findings": [
     {
       "condition": "Mass",
-      "probability": 0.582,
+      "prob": 0.5821,
       "threshold": 0.342,
-      "confidence": "HIGH"
-    },
-    {
-      "condition": "Atelectasis",
-      "probability": 0.441,
-      "threshold": 0.389,
-      "confidence": "MODERATE"
+      "normalized_conf": 0.3649,
+      "risk": "HIGH"
     }
   ],
-  "yolo_detections": [
-    {
-      "label": "Mass",
-      "confidence": 0.612,
-      "box_xyxy": [112.4, 74.8, 185.1, 148.3]
-    }
-  ],
+  "risk_level": "HIGH",
+  "localization_type": {
+    "Mass": "boxes_and_heatmap"
+  },
   "images": {
     "original_b64": "data:image/jpeg;base64,...",
     "heatmap_b64": "data:image/jpeg;base64,...",
     "boxes_b64": "data:image/jpeg;base64,...",
     "combined_b64": "data:image/jpeg;base64,..."
   },
-  "metrics": {
-    "latency_seconds": 0.324,
-    "top_condition": "Mass"
-  }
+  "yolo_boxes": [
+    {
+      "class": "Mass",
+      "class_name": "Mass",
+      "conf": 0.612,
+      "xyxy": [112, 74, 185, 148]
+    }
+  ],
+  "case_flags": []
 }
 ```
 
 ---
 
-## 8. Authorship & License
+## 7. License & Disclaimer
 
-### Author & Engineering Lead
-- **Debashis Mohapatra**
-- LinkedIn: [https://www.linkedin.com/in/debashis-mohapatra-113523302/](https://www.linkedin.com/in/debashis-mohapatra-113523302/)
-- GitHub: [@debashis-sharingan-21](https://github.com/debashis-sharingan-21)
-- Email: [debashismohapatra8260@gmail.com](mailto:debashismohapatra8260@gmail.com)
-
-### License
-This project is open-sourced under the [Apache License 2.0](LICENSE).
-
----
-
-> **Medical Disclaimer**: NeuroChestYOLO is an artificial intelligence research and educational software prototype. It is intended for investigational use and computer-aided triaging research only. It is not an FDA-cleared diagnostic medical device and should not replace clinical judgment or official radiological review by a licensed medical practitioner.
+- **License**: [Apache License 2.0](LICENSE)
+- **Medical Disclaimer**: This project is developed for educational and experimental research purposes only. It is not an FDA-cleared diagnostic device and must not be used as a replacement for professional clinical radiological evaluation.
