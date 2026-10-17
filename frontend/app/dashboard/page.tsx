@@ -47,15 +47,17 @@ interface AnalysisResults {
   case_flags: string[];
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "https://neuro-cxr.onrender.com";
+
 export default function DashboardPage() {
   // --- UI State ---
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [results, setResults] = useState<AnalysisResults | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"original" | "heatmap" | "boxes" | "combined">("original");
-  const [backendReady, setBackendReady] = useState<boolean | null>(null); // null=checking, true=ready, false=unavailable
+  const [backendReady, setBackendReady] = useState<boolean>(true); // permanently true so UI never locks up
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -65,42 +67,35 @@ export default function DashboardPage() {
     isAnalyzingRef.current = isAnalyzing;
   }, [isAnalyzing]);
 
-  // ── Backend Health Check (Every 3s) ───────
+  // ── Backend Health Check (Non-blocking: UI remains permanently ready) ───────
   useEffect(() => {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+    setBackendReady(true);
     
     const checkHealth = async () => {
-      // Do not poll or trigger offline state while analysis is in-flight
       if (isAnalyzingRef.current) return;
-
       try {
-        const res = await fetch(`${backendUrl}/health`, { method: "GET" });
+        const res = await fetch(`${API_URL}/health`, { method: "GET" });
         if (res.ok) {
-          const data = await res.json();
-          const isHealthy = res.ok && (data.status === "ok" || data.status === "healthy") && Boolean(data.models_loaded);
-          setBackendReady(isHealthy);
-        } else if (!isAnalyzingRef.current) {
-          setBackendReady(false);
+          setBackendReady(true);
         }
       } catch (err) {
-        if (!isAnalyzingRef.current) {
-          setBackendReady(false);
-        }
+        // Keep backendReady permanently true so the UI never locks up
+        setBackendReady(true);
       }
     };
 
-    checkHealth(); // initial
-    const intervalId = setInterval(checkHealth, 3000);
+    checkHealth(); // initial probe
+    const intervalId = setInterval(checkHealth, 10000);
 
     return () => clearInterval(intervalId);
   }, []);
 
   // Auto-run analysis when a file is selected
   useEffect(() => {
-    if (selectedFile && !results && !isAnalyzing && backendReady && !error) {
-      runAnalysis();
+    if (selectedFile && !results && !isAnalyzing && !analysisError) {
+      handleAnalyze();
     }
-  }, [selectedFile, results, isAnalyzing, backendReady, error]);
+  }, [selectedFile, results, isAnalyzing, analysisError]);
 
 
 
@@ -111,7 +106,7 @@ export default function DashboardPage() {
         abortControllerRef.current.abort();
       }
       setResults(null);
-      setError(null);
+      setAnalysisError(null);
       setSelectedFile(file);
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
@@ -126,21 +121,20 @@ export default function DashboardPage() {
         abortControllerRef.current.abort();
       }
       setResults(null);
-      setError(null);
+      setAnalysisError(null);
       setSelectedFile(file);
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
     }
   };
 
-  const runAnalysis = async () => {
+  const handleAnalyze = async () => {
     if (!selectedFile) return;
 
     setIsAnalyzing(true);
-    setError(null);
+    setAnalysisError(null);
 
     abortControllerRef.current = new AbortController();
-    // 45-second timeout for cloud container inference
     const timeoutId = setTimeout(() => {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
@@ -151,8 +145,7 @@ export default function DashboardPage() {
     formData.append("file", selectedFile);
 
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
-      const response = await fetch(`${backendUrl}/predict`, {
+      const response = await fetch(`${API_URL}/predict`, {
         method: "POST",
         body: formData,
         signal: abortControllerRef.current.signal,
@@ -161,7 +154,8 @@ export default function DashboardPage() {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error("Failed to process image. Ensure backend is running.");
+        const errDetail = await response.text().catch(() => "");
+        throw new Error(errDetail || `Inference server returned HTTP ${response.status}`);
       }
 
       const data = await response.json();
@@ -178,42 +172,20 @@ export default function DashboardPage() {
     } catch (err: any) {
       clearTimeout(timeoutId);
       if (err.name === 'AbortError') {
-        setError("Analysis request timed out after 45s or was cancelled. Container may be warming up or processing under high load.");
+        setAnalysisError("Analysis request timed out after 45 seconds. The cloud container may be cold-starting; please retry.");
       } else {
-        setError(err.message || "An unexpected error occurred during analysis.");
+        setAnalysisError(err.message || "An unexpected error occurred during analysis.");
       }
-      setSelectedFile(null);
-      setPreviewUrl(null);
-      setResults(null);
     } finally {
       setIsAnalyzing(false);
       abortControllerRef.current = null;
     }
   };
 
+  const runAnalysis = handleAnalyze;
+
   return (
     <div className="space-y-10 relative">
-      {/* Offline Modal - suppressed while analysis is in flight */}
-      {backendReady === false && !isAnalyzing && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl p-6 md:p-10 max-w-md w-full flex flex-col items-center text-center space-y-4 shadow-2xl">
-            <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-2 animate-pulse">
-              <AlertCircle className="text-red-500 h-8 w-8" />
-            </div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">System Offline</h2>
-            <p className="text-white/60 text-sm leading-relaxed">
-              The diagnostic backend is currently offline or loading models. Please wait for the system to come online to perform analysis.
-            </p>
-            <div className="mt-6 flex items-center gap-3 px-5 py-2.5 bg-white/5 border border-white/10 rounded-full">
-              <Loader2 className="h-4 w-4 text-accent animate-spin" />
-              <span className="text-[10px] font-mono uppercase tracking-widest text-white/60">
-                Attempting Reconnection...
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6">
         <div>
@@ -242,7 +214,7 @@ export default function DashboardPage() {
                 setSelectedFile(null); 
                 setPreviewUrl(null); 
                 setResults(null); 
-                setError(null);
+                setAnalysisError(null);
               }}
               className="flex items-center justify-center whitespace-nowrap px-6 py-2 bg-white/5 border border-white/10 text-white/60 hover:text-white rounded-full text-xs font-bold tracking-widest uppercase transition-colors pl-[1.6rem]"
             >
@@ -334,12 +306,12 @@ export default function DashboardPage() {
           )}
 
           {/* Error Message */}
-          {error && (
+          {analysisError && (
             <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-container flex items-start gap-3">
               <AlertCircle className="text-red-400 h-5 w-5 mt-0.5" />
               <div className="space-y-1">
                 <p className="text-red-400 text-sm font-bold">Inference Error</p>
-                <p className="text-red-400/60 text-xs font-mono">{error}</p>
+                <p className="text-red-400/60 text-xs font-mono">{analysisError}</p>
               </div>
             </div>
           )}
@@ -351,7 +323,7 @@ export default function DashboardPage() {
         <div className={!results && !isAnalyzing ? "block" : "hidden"}>
           <SampleGallery onSelectImage={(file) => {
             setResults(null);
-            setError(null);
+            setAnalysisError(null);
             setSelectedFile(file);
             const url = URL.createObjectURL(file);
             setPreviewUrl(url);

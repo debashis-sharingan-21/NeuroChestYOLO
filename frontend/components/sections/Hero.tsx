@@ -43,8 +43,8 @@ export default function Hero() {
     (window as any).lenisLocked = true;
     if ((window as any).lenis) (window as any).lenis.stop();
 
-    // Pre-warm the backend (Hugging Face Space)
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+    // Pre-warm the backend
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "https://neuro-cxr.onrender.com";
     fetch(`${backendUrl}/health`, { method: "GET" }).catch(() => {});
 
     return () => {
